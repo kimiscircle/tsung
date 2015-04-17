@@ -36,7 +36,6 @@
                  size,
                  data,
                  type,
-                 stamped = false,
                  jud_param,
                  regexp,
                  cle,

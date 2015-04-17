@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "/usr/share/tsung/tsung-1.0.dtd" []>
+<tsung loglevel="notice" version="1.0">
+  <clients>
+    <client host="localhost" use_controller_vm="true" maxusers="1000" />
+  </clients>
+
+  <servers>
+    <server host="node.remysharp.com" port="8001" type="tcp" />
+  </servers>
+
+  <load>
+    <arrivalphase phase="1" duration="1" unit="second">
+      <users maxnumber="1" arrivalrate="2" unit="second" />
+    </arrivalphase>
+  </load>
+
+  <sessions>
+    <session name="websocket" probability="100" type="ts_websocket">
+        <request subst="true">
+             <websocket type="connect" path="/">
+                 <ws_header name="" value=""></ws_header>
+             </websocket>
+        </request>
+
+        <request>
+            <dyn_variable name="uid" jsonpath="uid"/>
+            <websocket type="message">{"user":"user", "password":"password"}</websocket>
+        </request>
+
+        <request subst="true">
+            <match do="log" when="nomatch">ok</match>
+            <websocket type="message">{"uid":"%%_uid%%", "data":"data"}</websocket>
+        </request>
+
+        <request>
+            <websocket type="close"></websocket>
+        </request>
+    </session>
+  </sessions>
+</tsung>

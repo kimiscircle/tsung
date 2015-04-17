@@ -265,27 +265,6 @@ Here is an example of a session definition for the Jabber/XMPP protocol:
      </session>
    </sessions>
 
-Message stamping
-""""""""
-
-It is possible to stamp chat message by setting ``stamped`` attribute of
-``<jabber>`` element inside request to ``true``. The stamp will include current
-timestamp and ID of the sender node. If the recipient will recognise the node ID,
-it will compare the timestamp inside message with the current one. The difference
-will be reported as ``xmpp_msg_latency`` metric (in milliseconds).
-The aim of node ID comparison is to avoid slight inconsistencies
-of timestamps on different Tsung nodes.
-
-Only a fraction of requests will hit the same node they originated from,
-but with request rate high enough this fraction should be sufficient.
-
-``stamped`` is allowed only with ``size`` attribute. ``data`` will cause
-``stamped`` to be ignored. There is a minimal length of the stamp,
-roughly 30 bytes. When ``size`` is greater than stamp length, random
-padding will be added to the stamp. If the stamp length is higher than
-``size``, then only stamp will be used as messagecontent, effectively
-exceeding specified length.
-
 StartTLS
 """"""""
 
@@ -846,18 +825,11 @@ Example with Websocket as a session type:
 
    <request>
      <websocket type="close"></websocket>
-   </request>
+   </request> 
  </session>
 
 You can do substitution on attribute 'path' and message content, match a
 response or define dynamic variables based on the response message.
-
-If you use ``change_type`` to start a websocket, don't forget to set
-``bidi="true"``, like this:
-
-.. code-block:: xml
-
- <change_type new_type="ts_websocket" host="127.0.0.1" port="8080" server_type="tcp" restore="true" store="true" bidi="true"/>
 
 AMQP
 ^^^^^^^^^

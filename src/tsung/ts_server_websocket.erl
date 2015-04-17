@@ -36,13 +36,13 @@
 -include("ts_websocket.hrl").
 
 -record(state, {parent, socket = none, accept, host, port, path, opts, version,
-                frame, buffer = <<>>, state = not_connected, subprotos = []}).
+                frame, buffer = <<>>, state = not_connected, subprotos = [], headers = []}).
 
--record(ws_config, {path, version = "13", frame}).
+-record(ws_config, {path, version = "13", frame, headers}).
 
 protocol_options(#proto_opts{tcp_rcv_size = Rcv, tcp_snd_size = Snd,
-                             websocket_path = Path, websocket_frame = Frame}) ->
-    [#ws_config{path = Path, frame = Frame},
+                             websocket_path = Path, websocket_frame = Frame, websocket_handshake_headers = Headers}) ->
+    [#ws_config{path = Path, frame = Frame, headers = Headers},
      binary,
      {active, once},
      {recbuf, Rcv},
@@ -57,6 +57,7 @@ connect(Host, Port, Opts) ->
     Path = WSConfig#ws_config.path,
     Version = WSConfig#ws_config.version,
     Frame = WSConfig#ws_config.frame,
+    Headers = WSConfig#ws_config.headers,
 
     case gen_tcp:connect(Host, Port, opts_to_tcp_opts(TcpOpts)) of
         {ok, Socket} ->
@@ -64,7 +65,7 @@ connect(Host, Port, Opts) ->
                     fun() ->
                             loop(#state{parent = Parent, host = Host, port = Port,
                                         opts = TcpOpts, path = Path, version = Version,
-                                        frame = Frame, socket = Socket})
+                                        frame = Frame, socket = Socket, headers = Headers})
                     end),
             gen_tcp:controlling_process(Socket, Pid),
             inet:setopts(Socket, [{active, once}]),
@@ -75,8 +76,8 @@ connect(Host, Port, Opts) ->
 
 loop(#state{socket = Socket, host = Host, path = Path,
             version = Version, subprotos = SubProtocol,
-            state = not_connected} = State)->
-    {Handshake, Accept} = websocket:get_handshake(Host, Path, SubProtocol, Version),
+            state = not_connected, headers = Headers} = State)->
+    {Handshake, Accept} = websocket:get_handshake(Host, Path, SubProtocol, Version, Headers),
     gen_tcp:send(Socket, Handshake),
     loop(State#state{socket = Socket, accept = Accept,
                      state = waiting_handshake});

@@ -12,7 +12,7 @@ On Mac OS X you can install Tsung via Homebrew (http://brew.sh/): :command:`brew
 Dependencies
 ============
 
-* **Erlang/OTP R14B** and up (`download <http://www.erlang.org/download.html>`_). Erlang is now
+* **Erlang/OTP R13B** and up (`download <http://www.erlang.org/download.html>`_). Erlang is now
   part of Fedora and Debian/Ubuntu repositories.
 
 * **pgsql module** made by Christian Sunesson (for the PostgreSQL plugin):
@@ -40,7 +40,7 @@ Dependencies
   ``tsung_stats.pl`` script). The Template Toolkit is used for HTML
   reports (see http://template-toolkit.org/).
 
-* **python** and **matplotlib** (optional; for graphical output with ``tsung-plotter``).
+* **python** and **mathplotlib** (optional; for graphical output with ``tsung-plotter``).
 
 * for distributed tests, you need SSH access to remote machines
   without password (use a RSA/DSA key without passphrase or

@@ -79,10 +79,10 @@ dump(A,B) ->
 %% Returns: binary
 %%----------------------------------------------------------------------
 get_message(#websocket_request{type = connect, path = Path,
-                               subprotos = SubProtocol, version = Version},
+                               subprotos = SubProtocol, version = Version, headers = Headers},
             State=#state_rcv{session = WebsocketSession}) ->
     {Request, Accept} = websocket:get_handshake(State#state_rcv.host, Path,
-                                                SubProtocol, Version),
+                                                SubProtocol, Version, Headers),
     {Request, WebsocketSession#websocket_session{status = waiting_handshake,
                                                  accept = Accept}};
 get_message(#websocket_request{type = message, data = Data, frame = Frame},
@@ -180,3 +180,10 @@ add_dynparams(true, {DynVars, _S},
     Param#websocket_request{path = NewPath};
 add_dynparams(_Bool, _DynData, Param, _HostData) ->
     Param#websocket_request{}.
+
+% user defined headers
+headers([]) ->[];
+headers(Headers) ->
+  lists:foldl(fun({Name, Value}, Result) ->
+      [Name, ": ", Value, ?CRLF | Result]
+  end, [], lists:reverse(Headers)).

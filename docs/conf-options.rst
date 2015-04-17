@@ -7,7 +7,6 @@ Setting options
 .. index:: override
 .. index:: thinktime
 .. index:: ssl_ciphers
-.. index:: ssl_reuse_sessions
 .. index:: tcp_snd_buffer
 .. index:: tcp_rcv_buffer
 .. index:: udp_snd_buffer
@@ -31,58 +30,9 @@ configuration tags if override is true.
  <option name="udp_snd_buffer" value="16384"></option>
  <option name="udp_rcv_buffer" value="16384"></option>
 
-.. versionadded:: 1.5.2
-
-You can disable the SSL session cache (it is enabled by default)
-
-.. code-block:: xml
-
- <option name="ssl_reuse_sessions" value="false"/>
-
-You can also use the command line option ``-L <value>`` to change the
-session liefetime in the cache (10mn by default); value must be in seconds.
 
 .. index:: idle_timeout
 .. index:: global_ack_timeout
-
-Timeout for TCP connections
----------------------------------------
-
-.. versionadded:: 1.5.2
-
-You can specify a timeout in milliseconds for establishing a TCP connection. The default is ``infinity``.
-
-.. code-block:: xml
-
- <option name="connect_timeout" value="5000" />
-
-You can also change the timeout on a per-session basis using ``set_option``.
-
-.. code-block:: xml
-
- <set_option name="connect_timeout" value="1000" />
-
-Retry Attempts and Timeouts
----------------------------------------
-
-.. versionadded:: 1.5.2
-
-You can specify the amound of retry attempts made by tsung. The default is ``3``.
-
-.. code-block:: xml
-
- <option name="max_retries" value="5" />
-
-To disable retries entirely, set the value to ``0``.
-
-In addition, the option ``retry_timeout`` (in milliseconds; defaults to ``10``) is used to implement a
-simple backoff algorithm (``retry * retry_timeout``).
-
-.. code-block:: xml
-
- <set_option name="retry_timeout" value="1000" />
-
-
 
 Timeout for acknowledgments of messages
 ---------------------------------------
@@ -95,7 +45,7 @@ can be changed like this:
 .. code-block:: xml
 
  <option name="idle_timeout" value="300000"></option>
- <option name="global_ack_timeout" value="6000000"></option>
+ <option name="glocal_ack_timeout" value="6000000"></option>
 
 
 .. index:: hibernate

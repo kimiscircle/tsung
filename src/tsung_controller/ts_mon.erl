@@ -55,9 +55,6 @@
 -define(DELAYED_WRITE_SIZE,524288). % 512KB
 -define(DELAYED_WRITE_DELAY,5000).  % 5 sec
 
-%% one global ts_stats_mon procs + 4 dedicated stats procs to share the load
--define(STATSPROCS, [request, connect, page, transaction, ts_stats_mon]).
-
 -record(state, {log,          % log fd
                 backend,      % type of backend: text|...
                 log_dir,      % log directory
@@ -133,23 +130,18 @@ endclient({Who, When, Elapsed}) ->
 
 sendmes({none, _, _})       -> skip;
 sendmes({protocol, _, _})   -> skip;
-sendmes({protocol_local, _, _})   -> skip;
 sendmes({_Type, Who, What}) ->
     gen_server:cast({global, ?MODULE}, {sendmsg, Who, ?NOW, What}).
 
 rcvmes({none, _, _})    -> skip;
 rcvmes({protocol, _, _})-> skip;
-rcvmes({protocol_local, _, _})-> skip;
 rcvmes({_, _, closed})  -> skip;
 rcvmes({_Type, Who, What})  ->
     gen_server:cast({global, ?MODULE}, {rcvmsg, Who, ?NOW, What}).
 
 dump({none, _, _})-> skip;
-dump({cached, << >> })-> skip;
 dump({_Type, Who, What})  ->
-    gen_server:cast({global, ?MODULE}, {dump, Who, ?NOW, What});
-dump({cached, Data})->
-    gen_server:cast({global, ?MODULE}, {dump, cached, Data}).
+    gen_server:cast({global, ?MODULE}, {dump, Who, ?NOW, What}).
 
 launcher_is_alive() ->
     gen_server:cast({global, ?MODULE}, {launcher_is_alive}).
@@ -203,22 +195,15 @@ handle_call({start_logger, Machines, DumpType, Backend}, From, State) ->
     start_logger({Machines, DumpType, Backend}, From, State);
 
 %%% get status
-handle_call({status}, _From, State=#state{stats=Stats}) ->
-    {ok, Localhost} = ts_utils:node_to_hostname(node()),
-    CpuName         = {{cpu,"tsung_controller@"++Localhost}, sample},
-    CPU = case dict:find(CpuName,Stats#stats.os_mon) of
-              {ok, [ValCPU|_]} -> ValCPU ;
-              _ -> 0
-          end,
-
-    Request     = ts_stats_mon:status(request),
-    Interval    = ts_utils:elapsed(State#state.lastdate, ?NOW) / 1000,
-    Phase       = ts_stats_mon:status(newphase,sum),
-    Connected   =  case ts_stats_mon:status(connected,sum) of
+handle_call({status}, _From, State) ->
+    Request   = ts_stats_mon:status(request),
+    Interval  = ts_utils:elapsed(State#state.lastdate, ?NOW) / 1000,
+    Phase     = ts_stats_mon:status(newphase,sum),
+    Connected =  case ts_stats_mon:status(connected,sum) of
                      {ok, Val} -> Val;
                      _ -> 0
                  end,
-    Reply = { State#state.client, Request, Connected, Interval, Phase, CPU},
+    Reply = { State#state.client, Request,Connected, Interval, Phase},
     {reply, Reply, State};
 
 handle_call(Request, _From, State) ->
@@ -258,7 +243,6 @@ handle_cast({newclient, Who, When}, State=#state{stats=Stats}) ->
     case State#state.type of
         none     -> ok;
         protocol -> ok;
-        protocol_local -> ok;
         _ ->
             io:format(State#state.dumpfile,"NewClient:~w:~p~n",[ts_utils:time2sec_hires(When), Who]),
             io:format(State#state.dumpfile,"load:~w~n",[Clients])
@@ -282,8 +266,6 @@ handle_cast({endclient, Who, When, Elapsed}, State=#state{stats=Stats}) ->
         none ->
             skip;
         protocol ->
-            skip;
-        protocol_local ->
             skip;
         _Type ->
             io:format(State#state.dumpfile,"EndClient:~w:~p~n",[ts_utils:time2sec_hires(When), Who]),
@@ -322,10 +304,6 @@ handle_cast({sendmsg, Who, When, What}, State=#state{type=full,dumpfile=Log}) ->
 
 handle_cast({dump, Who, When, What}, State=#state{type=protocol,dumpfile=Log}) ->
     io:format(Log,"~w;~w;~s~n",[ts_utils:time2sec_hires(When),Who,What]),
-    {noreply, State};
-
-handle_cast({dump, cached, Data}, State=#state{type=protocol,dumpfile=Log}) ->
-    file:write(Log,Data),
     {noreply, State};
 
 handle_cast({rcvmsg, _, _, _}, State = #state{type=none}) ->
@@ -385,9 +363,8 @@ handle_info(_Info, State) ->
 terminate(Reason, State) ->
     ?LOGF("stopping monitor (~p)~n",[Reason],?NOTICE),
     export_stats(State),
-    % blocking call to all ts_stats_mon; this way, we are
-    % sure the last call to dumpstats is finished
-    lists:foreach(fun(Name) -> ts_stats_mon:status(Name) end, ?STATSPROCS),
+    ts_stats_mon:status(ts_stats_mon), % blocking call to ts_stats_mon; this way, we are
+                                       % sure the last call to dumpstats is finished
     case State#state.backend of
         json ->
             io:format(State#state.log,"]}]}~n",[]);
@@ -434,9 +411,13 @@ start_logger({Machines, DumpType, fullstats}, From, State=#state{fullstats=undef
 start_logger({Machines, DumpType, Backend}, _From, State=#state{log=Log,fullstats=FS}) ->
     ?LOGF("Activate clients with ~p backend~n",[Backend],?NOTICE),
     print_headline(Log,Backend),
-    start_launchers(Machines),
     timer:apply_interval(State#state.dump_interval, ?MODULE, dumpstats, [] ),
-    lists:foreach(fun(Name) -> ts_stats_mon:set_output(Backend,{Log,FS}, Name) end, ?STATSPROCS),
+    start_launchers(Machines),
+    ts_stats_mon:set_output(Backend,{Log,FS}),
+    ts_stats_mon:set_output(Backend,{Log,FS}, transaction),
+    ts_stats_mon:set_output(Backend,{Log,FS}, request),
+    ts_stats_mon:set_output(Backend,{Log,FS}, connect),
+    ts_stats_mon:set_output(Backend,{Log,FS}, page),
     start_dump(State#state{type=DumpType, backend=Backend}).
 
 print_headline(Log,json)->
@@ -493,7 +474,11 @@ export_stats_common(BackEnd, Stats,LastStats,Log)->
     ts_stats_mon:print_stats({finish_users_count, count},
                              Stats#stats.finish_users_count,
                              {BackEnd,LastStats#stats.finish_users_count,Log}),
-    lists:foreach(fun(Name) -> ts_stats_mon:dumpstats(Name) end, ?STATSPROCS).
+    ts_stats_mon:dumpstats(request),
+    ts_stats_mon:dumpstats(page),
+    ts_stats_mon:dumpstats(connect),
+    ts_stats_mon:dumpstats(transaction),
+    ts_stats_mon:dumpstats().
 
 %%----------------------------------------------------------------------
 %% Func: start_launchers/2
@@ -507,32 +492,3 @@ start_launchers(Machines) ->
     %% starts beam on all client hosts
     ts_config_server:newbeams(HostList).
 
-%% post_process_logs(FileName) ->
-%%     {ok, Device} = file:open(FileName, [read]),
-%%     post_process_line(io:get_line(Device, ""), Device, []).
-
-%% post_process_line(eof, Device, State) ->
-%%     file:close(Device);
-%% post_process_line("End "++ _, Device, Logs) ->
-%%     post_process_line(io:get_line(Device, ""),Device, Logs);
-%% post_process_line("# stats: dump at "++ TimeStamp, D, Logs=#logs{start_time=undefined}) ->
-%%     {StartTime,_}=string:to_integer(TimeStamp),
-%%     post_process_line(io:get_line(D, ""),D, #logs{start_time=StartTime});
-%% post_process_line("# stats: dump at "++ TimeStamp, Dev, Logs) ->
-%%     {Time,_}=string:to_integer(TimeStamp),
-%%     Current=Time-Logs#logs.start_time,
-%%     post_process_line(io:get_line(Dev, ""),Dev, Logs#logs{current_time=Current});
-%% post_process_line("# stats:  "++ Stats, Dev, Logs) ->
-%%     case string:tokens(Stats," ") of
-%%         {"users",Count, GlobalCount} ->
-%%             todo;
-%%         {Name, Count, Max} ->
-%%             todo;
-%%         {"tr_" ++ TrName, Count, Mean, StdDev, Max, Min, GMean,GCount} ->
-%%             todo;
-%%         {"{"++ Name, Count, Mean, StdDev, Max, Min, GMean,GCount} ->
-%%             todo;
-%%         {Name, Count, Mean, StdDev, Max, Min, GMean,GCount} ->
-%%             todo
-%%     end,
-%%     post_process_line(io:get_line(Dev, ""),Dev, Logs).

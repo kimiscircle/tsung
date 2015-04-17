@@ -27,6 +27,7 @@
 
 %% use by the client to create the request
 -record(websocket_request, {
+          headers=undefined,
           version = "13", % default is 13(rfc6455)
           type, % connect or message
           path, % connection path
@@ -35,7 +36,7 @@
           data % websocket data
          }).
 
--record(websocket_dyndata, { 
+-record(websocket_dyndata, {
           none
          }
        ).

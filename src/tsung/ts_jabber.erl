@@ -50,7 +50,6 @@
          userid/1]).
 
 -export ([starttls_bidi/2,
-          message_bidi/2,
           presence_bidi/2]).
 
 %%----------------------------------------------------------------------
@@ -166,7 +165,6 @@ parse_bidi(Data,  State) ->
     RcvdXml = binary_to_list(Data),
     BidiElements =
         [{"<presence[^>]*subscribe[\"\']", presence_bidi},
-         {"@@@([^@]+)@@@", message_bidi},
          {"<proceed", starttls_bidi}],
     lists:foldl(fun({Regex, Handler}, Acc)->
        case re:run(RcvdXml,Regex) of
@@ -181,22 +179,6 @@ parse_bidi(Data,  State) ->
 presence_bidi(RcvdXml, State)->
     {match,SubMatches} = re:run(RcvdXml,"<presence[^>]*subscribe[\"\'][^>]*>",[global]),
     bidi_resp(subscribed,RcvdXml,SubMatches,State).
-
-message_bidi(RcvdXml, State) ->
-    {match, [NodeStamp]} = re:run(RcvdXml, "@@@([^@]+)@@@", [{capture, all_but_first, list}]),
-    [NodeS, StampS] = string:tokens(NodeStamp, ","),
-    case integer_to_list(erlang:phash2(node())) of
-        NodeS ->
-            [MegaS, SecsS, MicroS] = string:tokens(StampS, ";"),
-            Mega = list_to_integer(MegaS),
-            Secs = list_to_integer(SecsS),
-            Micro = list_to_integer(MicroS),
-            Latency = timer:now_diff(erlang:now(), {Mega, Secs, Micro}),
-            ts_mon:add({ sample, xmpp_msg_latency, Latency / 1000});
-        _ ->
-            ignore
-    end,
-    {nodata, State}.
 
 starttls_bidi(_RcvdXml, #state_rcv{socket= Socket}=State)->
     ssl:start(),
@@ -287,8 +269,7 @@ add_dynparams2(true, DynVars, Param, _Host) ->
 %% than use side effects, as get_message/1 andn add_dynparams/4 aren't allowed
 %% to return a new DynData, and so they can't modify the session state.
 choose_domain(VHostFileId) ->
-    {ok,DomainBin} = ts_file_server:get_random_line(VHostFileId),
-    Domain=binary_to_list(DomainBin),
+    {ok,Domain} = ts_file_server:get_random_line(VHostFileId),
     UserServer = global:whereis_name(list_to_atom("us_"++Domain)),
     {Domain,UserServer}.
 

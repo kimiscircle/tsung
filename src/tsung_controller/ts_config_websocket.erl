@@ -35,6 +35,22 @@
 
 -include("xmerl.hrl").
 
+parse_headers([], Headers) ->
+  Headers;
+parse_headers([Element = #xmlElement{name=ws_header} | Tail], Headers) ->
+  Name   = ts_config:getAttr(string, Element#xmlElement.attributes, name),
+  Value  = ts_config:getAttr(string, Element#xmlElement.attributes, value),
+  EncodedValue = case ts_config:getAttr(atom, Element#xmlElement.attributes, encoding, none) of
+                   base64 ->
+                     ts_utils:encode_base64(Value);
+                   none ->
+                     Value
+                 end,
+  parse_headers(Tail, [{Name, EncodedValue} | Headers]);
+parse_headers([_| Tail], Headers) ->
+  parse_headers(Tail, Headers).
+
+
 %%----------------------------------------------------------------------
 %% Func: parse_config/2
 %% Args: Element, Config
@@ -48,16 +64,19 @@ parse_config(Element = #xmlElement{name = websocket},
              Config = #config{curid = Id, session_tab = Tab,
                               sessions = [CurS | _], dynvar = DynVar,
                               subst = SubstFlag, match = MatchRegExp}) ->
+    Contents = ts_config:getAttr(string, Element#xmlElement.attributes, contents),
     Type = ts_config:getAttr(atom, Element#xmlElement.attributes, type),
-    ValRaw = ts_config:getText(Element#xmlElement.content),
     Path = ts_config:getAttr(string, Element#xmlElement.attributes, path, "/"),
     Frame = ts_config:getAttr(string, Element#xmlElement.attributes, frame,
                               "binary"),
 
     %%is this needed ?
-    CleanStr = ts_utils:clean_str(ValRaw),
-    Request = #websocket_request{data = CleanStr, type = Type,
-                                 path = Path, frame = Frame},
+    %CleanStr = ts_utils:clean_str(ViewRaw),
+    %% Custom HTTP headers
+    Headers=  parse_headers(Element#xmlElement.content, []),
+  erlang:display(Headers),
+    Request = #websocket_request{data = Contents, type = Type,
+    path = Path, frame = Frame, headers = Headers},
 
     Ack = case Type of
               message ->

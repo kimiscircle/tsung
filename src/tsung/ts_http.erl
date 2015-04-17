@@ -82,17 +82,7 @@ decode_buffer(Buffer,#http{compressed={_,Comp}})->
 %%             Host::string(),DataSize::integer()}) -> ok
 %% @doc log request and response summary
 %% @end
-dump(protocol, Args)->
-    Data = dump2str(Args),
-    ts_mon_cache:dump({protocol, self(), Data });
-dump(protocol_local, Args)->
-    Data = dump2str(Args),
-    ?DebugF("local protocol: ~p",[Data]),
-    ts_local_mon:dump({protocol, self(), Data });
-dump(_,_) ->
-    ok.
-
-dump2str({#ts_request{param=HttpReq},HttpResp,UserId,Server,Size,Duration,Transactions})->
+dump(protocol,{#ts_request{param=HttpReq},HttpResp,UserId,Server,Size,Duration,Transactions})->
     Status = case element(2,HttpResp#http.status) of
                  none -> "error_no_http_status"; % something is really wrong here ... http 0.9 response ?
                  Int when is_integer(Int) ->
@@ -111,12 +101,15 @@ dump2str({#ts_request{param=HttpReq},HttpResp,UserId,Server,Size,Duration,Transa
                     atom_to_list(Err)
             end,
     Tr=ts_utils:log_transaction(Transactions),
-    ts_utils:join(";",[integer_to_list(UserId),
+    Data=ts_utils:join(";",[integer_to_list(UserId),
                             atom_to_list(HttpReq#http_request.method), Server,
                             get(last_url), Status,integer_to_list(Size),
                             Duration,Tr,Match,Error,
                             HttpReq#http_request.tag]
-                      ).
+                      ),
+    ts_mon:dump({protocol, self(), Data });
+dump(_,_) ->
+    ok.
 
 
 %%----------------------------------------------------------------------
@@ -246,13 +239,12 @@ add_dynparams(#http{session_cookies=DynCookie,user_agent=UA}, Req, _) ->
 subst(SubstParam, Req=#http_request{url=URL, body=Body, headers = Headers, oauth_url=OUrl,
                         oauth_access_token=AToken, oauth_access_secret=ASecret,digest_qop = QOP,
                         digest_cnonce=CNonce, digest_nc=Nc,digest_nonce=Nonce, digest_opaque=Opaque,
-                        realm=Realm, userid=UserId, passwd=Passwd, cookie = Cookies,
-                        content_type=ContentType}, DynVars) ->
+                        realm=Realm, userid=UserId, passwd=Passwd, cookie = Cookies}, DynVars) ->
     Req#http_request{url =  escape_url(ts_search:subst(URL, DynVars)),
-             body   = case SubstParam of
+             body   = case SubstParam of 
                         true ->
                             ts_search:subst(Body, DynVars);
-                        all_except_body ->
+                        all_except_body -> 
                             Body
                       end,
              headers = lists:foldl(fun ({Name, Value}, Result) ->
@@ -265,7 +257,6 @@ subst(SubstParam, Req=#http_request{url=URL, body=Body, headers = Headers, oauth
              digest_opaque = ts_search:subst(Opaque, DynVars),
              digest_qop    = ts_search:subst(QOP, DynVars),
              realm         = ts_search:subst(Realm, DynVars),
-             content_type  = ts_search:subst(ContentType, DynVars),
              oauth_access_secret = ts_search:subst(ASecret, DynVars),
              oauth_url = ts_search:subst(OUrl, DynVars),
              cookie = lists:foldl(

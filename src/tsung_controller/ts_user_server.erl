@@ -146,7 +146,7 @@ get_online(default,Id) ->
     get_online(Id);
 get_online(UserServer,Id) when is_list(Id)->
     get_online(UserServer,list_to_integer(Id));
-get_online(UserServer,Id) ->
+get_online(UserServer,Id) when Id->
     gen_server:call(UserServer, {get_online, Id}).
 
 get_online(Id) when is_list(Id) ->
@@ -451,10 +451,10 @@ fill_offline(0, _, {undefined,_})->
     ?LOG("no offline user defined",?DEB),
     ok;
 fill_offline(0, Offline, {FileId, Delimiter})->
-    ?LOGF("fill offline from file id ~p",[FileId],?DEB),
+    %% fill offline from file id
     case ts_file_server:get_all_lines(FileId) of
         {ok, Data} ->
-            ?DebugF("offline user from csv ~p",[Data]),
+            ?LOGF("offline user from csv ~p",[Data],?DEB),
             Fun = fun(Line) ->
                           [User,Pwd| _]= ts_utils:split(Line,Delimiter),
                           ets:insert(Offline,{{binary_to_list(User),binary_to_list(Pwd)},1})

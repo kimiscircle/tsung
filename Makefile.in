@@ -58,7 +58,7 @@ EBIN = ./ebin
 EBIN_TEST = ./ebin-test
 
 ifeq ($(TYPE),test)
-OPT =+export_all +debug_info
+OPT =+export_all
 EBIN = $(EBIN_TEST)
 endif
 
@@ -98,8 +98,7 @@ CONTROLLER_TARGETDIR = $(ERLANG_LIB_DIR)/$(CONTROLLER_APPLICATION)-$(VERSION)
 TARGETDIR = $(ERLANG_LIB_DIR)/$(APPLICATION)-$(VERSION)
 
 TEMPLATES = $(wildcard $(ESRC)/templates/*.thtml)
-TEMPLATES_STYLE = $(wildcard $(ESRC)/templates/style/*.js)
-TEMPLATES_STYLE += $(wildcard $(ESRC)/templates/style/*.css)
+TEMPLATES += $(wildcard $(ESRC)/templates/*.js)
 TMP       = $(wildcard *~) $(wildcard src/*~) $(wildcard inc/*~)
 INC_FILES = $(wildcard $(INC)/*.hrl)
 MOCHI    = $(wildcard $(ESRC)/lib/mochi*.erl)
@@ -211,7 +210,7 @@ clean:
 	-rm -f $(EBIN)/*.beam tsung.sh tsung.spec tsung.xml tsung.sh tsung-recorder.sh
 	-rm -f *.xml config.log src/test/*.xml src/test/usersdb.csv
 
-install: tsung doc install_recorder install_controller $(CONFFILE)
+install: doc install_recorder install_controller $(CONFFILE)
 	-rm -f $(TMP)
 
 	install -d $(DESTDIR)$(TARGETDIR)/priv
@@ -249,9 +248,7 @@ install: tsung doc install_recorder install_controller $(CONFFILE)
 	install -m 0644 $(CONFFILE) $(DESTDIR)$(CONFDIR)/
 
 	install -d $(DESTDIR)$(TEMPLATES_DIR)
-	install -d $(DESTDIR)$(TEMPLATES_DIR)/style
 	install -m 0644 $(TEMPLATES) $(DESTDIR)$(TEMPLATES_DIR)/
-	install -m 0644 $(TEMPLATES_STYLE) $(DESTDIR)$(TEMPLATES_DIR)/style
 	install -m 0644 $(DTD) $(DESTDIR)$(SHARE_DIR)/
 
 install_recorder:
@@ -329,7 +326,7 @@ release: Makefile tsung.spec doc user_guide
 	tar zcf tmp.tgz $(SRC) $(APPFILES_IN) $(INC_FILES) $(LIBSRC) \
 		$(CONTROLLER_SRC) $(CONTROLLER_APPFILES_IN) $(TESTSRC) \
 		$(RECORDER_APPFILES_IN) \
-		$(RECORDER_SRC) $(TEMPLATES) $(TEMPLATES_STYLE)\
+		$(RECORDER_SRC) $(TEMPLATES) \
 		man/*.erl man/*.txt man/*.dia man/*.png man/Makefile man/*.sgml man/*.1 \
 		docs/*.rst docs/Makefile docs/*.txt docs/README docs/*.py docs/_static docs/_templates \
 		$(USERMANUAL) $(USERMANUAL_SRC) $(USERMANUAL_IMG) $(DTD) \

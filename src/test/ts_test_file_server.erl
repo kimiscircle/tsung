@@ -62,11 +62,24 @@ config_file_server_huge_get_random_test()->
      erlang:display([?CSVSIZE," get all lines (random):", Time2]),
     ?assertMatch(ok, Out ).
 
+
 config_file_server_huge_get_next_test()->
     {Time2, Out } = timer:tc( lists, foreach, [ fun(_)-> ts_file_server:get_next_line() end,lists:seq(1,?CSVSIZE)]),
      erlang:display([?CSVSIZE," get all lines:", Time2]),
     ?assertMatch(ok, Out ).
 
+config_file_server_huge_test()->
+    myset_env(),
+    ts_file_server:stop(),
+    ts_file_server:start(),
+    CSV=lists:foldl(fun(I,Acc)-> IStr=integer_to_list(I),
+        [Acc,"user",IStr,";passwd",IStr,"\n"]
+    end, [],lists:seq(1,?CSVSIZE)),
+    File="./src/test/usersdb.csv",
+    file:write_file(File,list_to_binary(CSV)),
+    {Time1, Out }  = timer:tc(ts_file_server, read, [[{default,File}]]),
+    erlang:display([?CSVSIZE," read_file:", Time1]),
+    ?assertMatch(ok, Out).
 config_file_server_cycle_test()->
     myset_env(),
     ts_file_server:stop(),

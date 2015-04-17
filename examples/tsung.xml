@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "/home/hippo/tmp/share/tsung/tsung-1.0.dtd">
+<tsung loglevel="notice" dumptraffic="protocol">
+
+    <clients>
+        <client host="localhost" use_controller_vm="true"/>
+    </clients>
+
+<!-- server is not used by oar plugin, so this is meaningless -->
+ <servers><server host="127.0.0.1" port="5432" type="erlang"/></servers>
+
+ <monitoring>
+     <monitor host="localhost" type="erlang"/>
+ </monitoring>
+ <load>
+     <user session="manynodes" start_time="1" unit="second"></user>
+     <user session="manycores" start_time="30" unit="second"></user>
+     <user session="seq-jobs" start_time="60" unit="second"></user>
+     <user session="manycores" start_time="100" unit="second"></user>
+     <user session="besteffort" start_time="1" unit="second"></user>
+ </load>
+
+ <options>
+     <option name="job_notify_port" value="33333"></option>
+     <option name="tcp_timeout" value="86400000"></option>
+ </options>
+
+ <sessions>
+
+<!-- besteffort: start a lot of 1 core BE jobs and then a big (64 core) regular job -->
+  <session probability="0" name="besteffort" type="ts_job">
+      <for from="1" to="1000" incr="1" var="counter">
+          <request>
+              <job type="oar" name="besteffort" req="submit" resources="/core=1" duration="500" script="/home/hippo/tmp/sleep.sh" walltime="00:30:00" options="-t besteffort -t idempotent" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/>
+          </request>
+      </for>
+
+      <thinktime value="30"/>
+
+      <request>
+          <job type="oar" name="bigafterBE" req="submit" resources="/core=64" duration="60" script="/home/hippo/tmp/sleep.sh" walltime="00:20:00" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/>
+      </request>
+      <request><job type="oar" req="wait_jobs"/></request>
+  </session>
+
+<!-- start a big job on several nodes, but not using all the cores -->
+  <session probability="0" name="manynodes" type="ts_job">
+      <request subst='true'>
+          <job type="oar" name="manynodes" req="submit" resources="/nodes=8/core=3" duration="190" script="/home/hippo/tmp/sleep.sh" walltime="00:20:00" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/>
+      </request>
+      <request><job type="oar" req="wait_jobs"/></request>
+  </session>
+<!-- start a big container job (64 cores) and lots of single core jobs inside the container -->
+  <session probability="0" name="container" type="ts_job">
+      <request>
+          <dyn_variable name="container" re="OAR_JOB_ID=(\d+)"/>
+          <job type="oar" name="container" req="submit" resources="/core=64" duration="290" script="/home/hippo/tmp/sleep.sh" walltime="01:20:00" options="-t container" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/>
+      </request>
+
+      <for from="1" to="128" incr="1" var="counter">
+          <request subst='true'><job name="inner" type="oar" req="submit" resources="/core=1" duration="120" script="/home/hippo/tmp/sleep.sh" options="-t inner=%%_container%%" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/></request>
+      </for>
+      <request><job type="oar" req="wait_jobs"/></request>
+  </session>
+
+<!-- multiple cores job -->
+  <session probability="0" name="manycores" type="ts_job">
+      <request subst='true'>
+          <job type="oar" name="manycores" queue="par" req="submit" resources="/core=16" duration="150" script="/home/hippo/tmp/sleep.sh" walltime="00:20:00" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/>
+      </request>
+      <request><job type="oar" req="wait_jobs"/></request>
+  </session>
+
+<!-- submit a lot of sequential (one core) jobs -->
+  <session probability="100" name="seq-jobs" type="ts_job">
+      <setdynvars sourcetype="random_number" start="10" end="120">
+          <var name="duration" />
+      </setdynvars>
+
+      <for from="1" to="200" incr="1" var="counter">
+          <request subst='true'><job name="seq" type="oar" req="submit" resources="/core=1" duration="120" script="/home/hippo/tmp/sleep.sh" notify_script="/home/hippo/tmp/notify.sh" notify_port="33333"/></request>
+      </for>
+      <request><job type="oar" req="wait_jobs"/></request>
+  </session>
+ </sessions>
+</tsung>
+
+

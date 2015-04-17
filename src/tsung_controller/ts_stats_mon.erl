@@ -147,7 +147,7 @@ init([Id]) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%----------------------------------------------------------------------
 handle_call({status}, _From, State=#state{stats=Stats} ) when is_list(Stats) ->
-    [_Esp, _Var, _Min, _Max, Count, _MeanFB,_CountFB,_Last] = Stats,
+    [_Esp, _Var, _Max, _Min, Count, _MeanFB,_CountFB,_Last] = Stats,
     {reply, Count, State};
 handle_call({status}, _From, State=#state{stats=Stats} ) ->
     {reply, Stats, State};

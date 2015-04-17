@@ -29,7 +29,7 @@
         { regexp,
           subst = false,
          'when' = false,
-		  name,
+		  name, 
           do    = continue, %(continue | loop | abort | log )
           sleep_loop,       % in seconds
           apply_to_content,
@@ -58,18 +58,17 @@
          bosh_path = "/http-bind/",  % for bash only
          websocket_path = "/chat",  % for websocket only
          websocket_frame = "binary",  % for websocket only
-         retry_timeout = 10,        % retry sending in milliseconds
-         max_retries = 3,           % maximum number of retries
+         websocket_handshake_headers = [],  % for websocket only
+         retry_timeout = 10,        % retry sending in microsec
          idle_timeout  = 600000,    % timeout for local ack
-         connect_timeout  = infinity,   % timeout for gen_tcp:connect/4 (infinity OR time in milliseconds)
          global_ack_timeout = infinity, % timeout for global ack
          tcp_rcv_size  = 32768,     % tcp buffers size
          tcp_snd_size  = 32768,
          udp_rcv_size,              % udp buffers size
          udp_snd_size,
-         certificate = [],          % for ssl
-         reuse_sessions = true,     % for ssl
-         is_first_connect = true   % whether it's the first connection
+         certificate = [],
+         reuse_sessions = true,       %for ssl
+         is_first_connect = true      % whether it's the first connection
         }).
 
 -record(token_bucket,

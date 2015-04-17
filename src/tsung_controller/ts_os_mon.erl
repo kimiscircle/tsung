@@ -54,25 +54,16 @@ send(Mon_Server, Data) ->
 %% in the config file.
 %%--------------------------------------------------------------------
 activate() ->
-    {ok, Controller} = ts_utils:node_to_hostname(node()),
     case ts_config_server:get_monitor_hosts() of
         [] ->
-            ?LOG("Add monitoring of controller node",?DEB),
-            ts_os_mon_sup:start_child(erlang, {Controller,[],?INTERVAL, {global,ts_mon}}),
+           ?LOG("os_mon disabled",?NOTICE),
             ok;
         Hosts ->
-            NewHosts = case lists:keyfind(Controller, 1, Hosts) of
-                           false ->
-                               ?LOG("Force monitoring of controller node",?DEB),
-                               Hosts++[{Controller, {erlang,[]}}];
-                           _ ->
-                               Hosts
-                       end,
             Fun = fun({HostStr,{Type,Options}}) ->
                           Args= {HostStr, Options, ?INTERVAL,{global, ts_mon}},
                           ts_os_mon_sup:start_child(Type, Args)
                   end,
-            lists:foreach(Fun,NewHosts)
+            lists:foreach(Fun,Hosts)
     end.
 
 

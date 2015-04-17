@@ -80,7 +80,7 @@ dump(A, B) ->
 get_message(#mqtt_request{type = connect, clean_start = CleanStart,
                           keepalive = KeepAlive, will_topic = WillTopic,
                           will_qos = WillQos, will_msg = WillMsg,
-                          will_retain = WillRetain, username = UserName, password = Password},
+                          will_retain = WillRetain},
             #state_rcv{session = MqttSession}) ->
     ClientId = ["tsung-", ts_utils:randombinstr(10)],
     PublishOptions = mqtt_frame:set_publish_options([{qos, WillQos},
@@ -91,8 +91,6 @@ get_message(#mqtt_request{type = connect, clean_start = CleanStart,
     Options = mqtt_frame:set_connect_options([{client_id, ClientId},
                                               {clean_start, CleanStart},
                                               {keepalive, KeepAlive},
-                                              {username, UserName},
-                                              {password, Password},
                                               Will]),
     Message = #mqtt{type = ?CONNECT, arg = Options},
     {mqtt_frame:encode(Message),
@@ -261,22 +259,6 @@ parse_config(Element, Conf) ->
 %% Returns: #websocket_request
 %%----------------------------------------------------------------------
 add_dynparams(true, {DynVars, _S},
-              Param = #mqtt_request{type = connect, clean_start = CleanStart,
-				    keepalive = KeepAlive, will_topic = WillTopic,
-				    will_qos = WillQos, will_msg = WillMsg,
-				    will_retain = WillRetain, username = UserName,
-				    password = Password},
-              _HostData) ->
-    NewUserName = ts_search:subst(UserName, DynVars),
-    NewPassword = ts_search:subst(Password, DynVars),
-    Param#mqtt_request{ type = connect,
-			clean_start = CleanStart,
-			keepalive = KeepAlive, will_topic = WillTopic,
-			will_qos = WillQos, will_msg = WillMsg,
-			will_retain = WillRetain,
-			username = NewUserName,
-			password = NewPassword };
-add_dynparams(true, {DynVars, _S},
               Param = #mqtt_request{type = publish, topic = Topic,
                                     payload = Payload},
               _HostData) ->
@@ -319,3 +301,4 @@ ping_loop(Proto, Socket, KeepAlive) ->
             ping_loop(Proto, Socket, KeepAlive);
         stop -> ok
     end.
+

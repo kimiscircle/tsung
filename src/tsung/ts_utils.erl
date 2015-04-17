@@ -34,18 +34,18 @@
 %% user interface
 -export([debug/3, debug/4, get_val/1, init_seed/0, chop/1, elapsed/2,
          now_sec/0, node_to_hostname/1, add_time/2, keyumerge/3, key1search/2,
-         level2int/1, mkey1search/2, datestr/0, datestr/1, size_or_length/1,
+         level2int/1, mkey1search/2, datestr/0, datestr/1,
          erl_system_args/0, erl_system_args/1, setsubdir/1, export_text/1,
          foreach_parallel/2, spawn_par/3, inet_setopts/3, resolve/2,
          stop_all/2, stop_all/3, stop_all/4, join/2, split/2, split2/2, split2/3,
-         make_dir/1, make_dir_raw/1, is_ip/1, from_https/1, to_https/1, keymax/2,
+         make_dir_rec/1, is_ip/1, from_https/1, to_https/1, keymax/2,
          check_sum/3, check_sum/5, clean_str/1, file_to_list/1, term_to_list/1,
-         decode_base64/1, encode_base64/1, to_lower/1,
+         decode_base64/1, encode_base64/1, to_lower/1, release_is_newer_or_eq/1,
          randomstr/1,urandomstr/1,urandomstr_noflat/1, eval/1, list_to_number/1,
-         time2sec/1, time2sec_hires/1, read_file_raw/1, init_seed/1, jsonpath/2,
+         time2sec/1, time2sec_hires/1, read_file_raw/1, init_seed/1, jsonpath/2, pmap/2,
          concat_atoms/1, ceiling/1, accept_loop/3, append_to_filename/3, splitchar/2,
          randombinstr/1,urandombinstr/1,log_transaction/1,conv_entities/1, wildcard/2,
-         ensure_all_started/2, pmap/2, pmap/3, get_node_id/0, filtermap/2, new_ets/2]).
+         ensure_all_started/2]).
 
 level2int("debug")     -> ?DEB;
 level2int("info")      -> ?INFO;
@@ -166,16 +166,14 @@ init_seed({A,B}) when is_integer(A) and is_integer(B)->
     %% initial pseudo random values will be quite closed to each
     %% other. Trying to avoid this by using a multiplier big enough
     %% (because the algorithm use mod 30XXX , see random.erl).
-    random:seed(4000*A*B*Id,-4000*B*A*Id,4000*Id*Id*A);
+    random:seed(1000*A*A,-1000*B*B,1000*Id*Id);
 init_seed({A,B,C}) ->
     random:seed(A,B,C).
 
 get_node_id() ->
     case string:tokens(atom_to_list(node()),"@") of
         ["tsung_control"++_,_]    -> 123456;
-        ["tsung"++Tail,_]         ->
-            {match, [I]} = re:run(Tail, "\\d+$", [{capture, all, list}]),
-            list_to_integer(I);
+        ["tsung"++I,_]            -> list_to_integer(I);
         _                         -> 654321
     end.
 
@@ -222,18 +220,10 @@ encode_base64(String)->
 decode_base64(Base64)->
     base64:decode_to_string(Base64).
 
-%%----------------------------------------------------------------------
-%% Func: filtermap/2
-%% Purpose lists:zf is called lists:filtermap in erlang R16B1 and newer
-%%
-%%----------------------------------------------------------------------
-filtermap(Fun, List)->
-    case erlang:function_exported(lists, filtermap, 2) of
-        true ->
-            lists:filtermap(Fun,List);
-        false ->
-            lists:zf(Fun,List)
-    end.
+% return true if current version of erlang is newer or equal
+release_is_newer_or_eq(Release)->
+    erlang:system_info(version) >= Release.
+
 
 %%----------------------------------------------------------------------
 %% Func: key1search/2
@@ -324,26 +314,13 @@ erl_system_args(extended)->
                     undefined -> "";
                     {ok, Max} -> " -kernel inet_dist_listen_max " ++ integer_to_list(Max)++" "
                 end,
-    SSLCache = case application:get_env(ssl,session_cb) of
-                   {ok, CB} when is_atom(CB) -> " -ssl session_cb " ++ atom_to_list(CB)++" ";
-                   _ -> ""
-               end,
-    SSLLifetime = case application:get_env(ssl,session_lifetime) of
-                   {ok, Time} when is_integer(Time) -> " -ssl session_lifetime " ++ integer_to_list(Time)++" ";
-                   _ -> ""
-               end,
-    SSLCacheSize = case application:get_env(tsung,ssl_session_cache) of
-                   {ok, Reuse} when is_integer(Reuse)-> " -tsung reuse_sessions " ++ integer_to_list(Reuse)++" ";
-                   _ -> ""
-               end,
     Threads= "+A "++integer_to_list(erlang:system_info(thread_pool_size))++" ",
     ProcessMax="+P "++integer_to_list(erlang:system_info(process_limit))++" ",
     Mea = case  erlang:system_info(version) of
               "5.3" ++ _Tail     -> " +Mea r10b ";
               _ -> " "
           end,
-    lists:append([BasicArgs, Shared, Hybrid, Smp, Mea, Inet, Proto, Threads,
-                  ProcessMax,ListenMin,ListenMax,SSLCache,SSLLifetime,SSLCacheSize]).
+    lists:append([BasicArgs, Shared, Hybrid, Smp, Mea, Inet, Proto, Threads,ProcessMax,ListenMin,ListenMax]).
 
 %%----------------------------------------------------------------------
 %% setsubdir/1
@@ -417,38 +394,30 @@ stop_all(_,_,_,_)->
     erlang:display("Bad Hostname").
 
 %%----------------------------------------------------------------------
-%% make_dir/1
+%% make_dir_rec/1
 %% Purpose: create directory. Missing parent directories ARE created
 %%----------------------------------------------------------------------
-make_dir(DirName) ->
-    make_dir_rec(DirName,file).
-
-make_dir_raw(DirName) ->
-    make_dir_rec(DirName,prim_file).
-
-make_dir_rec(DirName,FileMod) when is_list(DirName) ->
-    case  FileMod:read_file_info(DirName) of
+make_dir_rec(DirName) when is_list(DirName) ->
+    case  file:read_file_info(DirName) of
         {ok, #file_info{type=directory}} ->
             ok;
         {error,enoent} ->
-            make_dir_rec("", FileMod,filename:split(DirName));
+            make_dir_rec("", filename:split(DirName));
         {error, Reason}  ->
             {error,Reason}
     end.
 
-make_dir_rec(_Path, _FileMod, []) ->
+make_dir_rec(_Path, []) ->
     ok;
-make_dir_rec(Path, FileMod,[Parent|Childs]) ->
+make_dir_rec(Path, [Parent|Childs]) ->
     CurrentDir=filename:join([Path,Parent]),
-    case  FileMod:read_file_info(CurrentDir) of
+    case  file:read_file_info(CurrentDir) of
         {ok, #file_info{type=directory}} ->
-            make_dir_rec(CurrentDir, FileMod,Childs);
+            make_dir_rec(CurrentDir, Childs);
         {error,enoent} ->
-            case FileMod:make_dir(CurrentDir) of
+            case file:make_dir(CurrentDir) of
                 ok ->
-                    make_dir_rec(CurrentDir, FileMod, Childs);
-                {error, eexist} ->
-                    make_dir_rec(CurrentDir, FileMod, Childs);
+                    make_dir_rec(CurrentDir, Childs);
                 Error ->
                     Error
             end;
@@ -663,7 +632,6 @@ keyumerge(N,[A|Rest],B)->
 %% Purpose: Return Max of Nth element of a list of tuples
 %% Returns: Number
 %%----------------------------------------------------------------------
-keymax(_N,[])-> 0;
 keymax(N,[L])-> element(N,L);
 keymax(N,[E|Tail])->
     keymax(N,Tail,element(N,E)).
@@ -873,31 +841,6 @@ pmap(F, L) ->
     [receive {Pid, Result} -> Result end || Pid <- [spawn(fun() -> Parent ! {self(), F(X)} end) || X <- L]].
 
 
-%% Map function F over list L in parallel, with maximum NProcs in parallel
-%% FIXME: handle timeout
-pmap(F, L, NProcs) ->
-    pmap(F, L, NProcs,"").
-
-pmap(F, L, NProcs, Res) when length(L) > NProcs->
-    {Head, Tail} = lists:split(NProcs,L),
-    Parent = self(),
-    lists:foldl(fun(X, Acc) -> spawn(fun() -> Parent ! {pmap, self(), F(X), Acc} end), Acc+1  end, 0, Head),
-    NewRes = wait_result(NProcs,[]),
-    pmap(F,Tail, NProcs, Res ++ NewRes);
-
-pmap(F, L, _NProcs, Acc) ->
-    Acc ++ pmap(F,L).
-
-wait_result(0, Res)->
-    {_Ids, RealRes} = lists:unzip(lists:keysort(1, Res)),
-    RealRes;
-wait_result(Nprocs, Res)->
-    receive
-        {pmap, _Pid, Result, Id} ->
-            NewRes = Res ++ [{Id, Result}],
-            wait_result(Nprocs-1, NewRes)
-    end.
-
 %%
 ceiling(X) ->
     T = erlang:trunc(X),
@@ -982,21 +925,4 @@ wildcard(Wildcard,Names) ->
     Pattern = re:replace(PatternTmp,"\\?",".{1}",[{return,list}]) ++ "$" ,
     lists:filter(fun(N) -> re:run(N, Pattern) =/= nomatch end, Names).
 
-%%--------------------------------------------------------------------
-%% Func: new_ets/1
-%% Purpose: Wrapper for ets:new/1 used in external modules
-%% @spec new_ets(Prefix::binary(), UserId::integer()) -> string()
-%% @doc init an ets:table
-%% @end
-%%--------------------------------------------------------------------
-new_ets(Prefix, UserId)->
-    EtsName = binary_to_list(Prefix) ++ "_" ++ integer_to_list(UserId),
-    ?LOGF("create ets:table ~p ~n", [EtsName], ?INFO),
-    ets:new(list_to_atom(EtsName), []).
 
-
-size_or_length(Data) when is_binary(Data) ->
-    size(Data);
-size_or_length(Data) when is_list(Data) ->
-    length(Data).
-    

@@ -285,7 +285,7 @@ handle_call({get_next_session, HostName, PhaseId}, _From, State=#state{users=Use
     ?DebugF("get new session for ~p~n",[_From]),
     case choose_session(Config#config.sessions, Config#config.total_popularity, PhaseId) of
         {ok, Session=#session{id=Id}} ->
-            ?LOGF("Session ~p chosen~n",[Id],?INFO),
+            ?LOGF("Session ~p choosen~n",[Id],?INFO),
             ts_mon:newclient({Id,?NOW}),
             {IPParam, Server} = get_user_param(Client,Config),
             {reply, {ok, Session#session{client_ip= IPParam, server=Server,userid=Users,
@@ -334,10 +334,10 @@ handle_call({get_monitor_hosts}, _From, State) ->
     Config = State#state.config,
     {reply, Config#config.monitor_hosts, State};
 
-% get status: send the number of actives nodes, number of phases
+% get status: send the number of actives nodes
 handle_call({status}, _From, State) ->
     Config = State#state.config,
-    Reply = {ok, length(Config#config.clients), State#state.ending_beams, length(Config#config.arrivalphases) },
+    Reply = {ok, length(Config#config.clients), State#state.ending_beams},
     {reply, Reply, State};
 
 handle_call({get_jobs_state}, _From, State) when State#state.config == undefined ->
@@ -379,11 +379,7 @@ handle_cast({newbeams, HostList}, State=#state{logdir   = LogDir,
             Args = set_remote_args(LogDir, Config#config.ports_range),
             {BeamsIds, LastId} = lists:mapfoldl(fun(A,Acc) -> {{A, Acc}, Acc+1} end, Id0, RemoteBeams),
             Fun = fun({Host,Id}) -> remote_launcher(Host, Id, Args) end,
-            %% start beams in parallel, at most 10 in parallel
-            %% (because sshd MaxSessions = 10, in case we have to
-            %% start more than 10 beams on a single host)
-            RemoteNodes = ts_utils:pmap(Fun, BeamsIds,9),
-            check_remotes_ok(RemoteNodes),
+            RemoteNodes = ts_utils:pmap(Fun, BeamsIds),
             ?LOG("All remote beams started, syncing ~n",?NOTICE),
             global:sync(),
             ?LOG("Syncing done, start remote tsung application ~n", ?DEB),
@@ -673,7 +669,7 @@ setup_user_servers(FileId,Val) when is_atom(FileId), is_integer(Val) ->
     {ok,Domains} = ts_file_server:get_all_lines(FileId),
     ?LOGF("Domains:~p~n",[Domains],?DEB),
     lists:foreach(fun(Domain) ->
-                    {ok,_} = ts_user_server_sup:start_user_server(list_to_atom("us_" ++binary_to_list(Domain)))
+                    {ok,_} = ts_user_server_sup:start_user_server(list_to_atom("us_" ++Domain))
                   end, Domains),
     ts_user_server:reset_all(Val).
 
@@ -764,7 +760,7 @@ start_slave(Host, Name, Args) when is_atom(Host), is_atom(Name)->
             Node;
         {error, Reason} ->
             ?LOGF("Can't start newbeam on host ~p (reason: ~p) ! Aborting!~n",[Host, Reason],?EMERG),
-            {error, {slave_failure, Reason}}
+            exit({slave_failure, Reason})
     end.
 choose_port(_,_, undefined) ->
     {[],0};
@@ -861,14 +857,6 @@ remote_launcher(Host, NodeId, Args)->
     ?LOGF("starting newbeam ~p on host ~p with Args ~p~n", [Name, Host, Args], ?INFO),
     start_slave(Host, Name, Args).
 
-check_remotes_ok(Remotes) ->
-    lists:foreach(fun({error, Reason}) ->
-                          ts_mon:abort(),
-                          exit(Reason);
-                     (_) ->
-                          ok
-                  end, Remotes).
-
 set_remote_args(LogDir,PortsRange)->
     {ok, PAList}    = init:get_argument(pa),
     PA = lists:flatmap(fun(A) -> [" -pa "] ++A end,PAList),
@@ -954,8 +942,6 @@ update_total_pop(UseWeight,N, Sessions, Total)   ->
     update_total_pop(UseWeight, N-1, Sessions, [PhaseTotal |Total]).
 
 %% set popularity of session 'Name' per phase (needed when <session_setup> is used)
-set_pop(_Name,Popularity,[]) ->
-    Popularity;
 set_pop(Name,Popularity,Phases) ->
     set_pop(Name,Popularity,Phases,[]).
 

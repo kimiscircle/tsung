@@ -27,7 +27,7 @@
 -vc('$Id$ ').
 -author('nicolas.niclausse@niclux.org').
 
--export([start/0, start/2, start_phase/3, stop/1, stop_all/1, status/1, status_str/0]).
+-export([start/0, start/2, start_phase/3, stop/1, stop_all/1, status/1]).
 -behaviour(application).
 
 -include("ts_macros.hrl").
@@ -57,7 +57,6 @@ start(_Type, _StartArgs) ->
             halt(1);
         {ok, {LogDir, _Name}} ->
             erlang:display("Log directory is: " ++ LogDir),
-            application:set_env(tsung_controller,log_dir_real,LogDir),
             LogFile = filename:join(LogDir, atom_to_list(node()) ++ ".log"),
             case  error_logger:logfile({open, LogFile }) of
                 ok ->
@@ -111,38 +110,29 @@ start_phase(start_clients, _StartType, _PhaseArgs) ->
 %%----------------------------------------------------------------------
 status([Host]) when is_atom(Host)->
     _List = net_adm:world_list([Host]),
-    Msg = case global:sync() of
-              ok ->
-                  status_str();
-              {error, _Reason} ->
-                  "No status available: Can't synchronize with Tsung erlang nodes"
+    global:sync(),
+    Msg = case catch ts_mon:status() of
+              {Clients, Count, Connected, Interval, Phase} ->
+
+                  S1 = io_lib:format("Tsung is running [OK]~n" ++
+                                     " Current request rate:    ~.2f req/sec~n" ++
+                                     " Current users:           ~p~n" ++
+                                     " Current connected users: ~p ~n",
+                                     [Count/Interval, Clients, Connected]),
+                  {ok, Nodes, Ended_Beams} = ts_config_server:status(),
+                  case {Phase, Nodes == Ended_Beams} of
+                      {error, _} -> % newphase not initialised, first phase
+                          S1 ++ " Current phase:           1";
+                      {_, true} ->
+                          S1 ++ " Current phase:           last, waiting for pending clients";
+                      {{ok,P}, _} ->
+                          NPhases = (P div Nodes) + 1,
+                          io_lib:format("~s Current phase:        ~p",[S1,NPhases])
+                  end;
+              {'EXIT', {noproc, _}} ->
+                  "Tsung is not started"
           end,
     io:format("~s~n",[Msg]).
-
-status_str()->
-    case catch ts_mon:status() of
-        {Clients, Count, Connected, Interval, Phase, _Cpu} ->
-
-            S1 = io_lib:format("Tsung is running [OK]~n" ++
-                                   " Current request rate:    ~.2f req/sec~n" ++
-                                   " Current users:           ~p~n" ++
-                                   " Current connected users: ~p ~n",
-                               [Count/Interval, Clients, Connected]),
-            {ok, Nodes, Ended_Beams, _} = ts_config_server:status(),
-            case {Phase, Nodes == Ended_Beams} of
-                {error, _} -> % newphase not initialised, first phase
-                    S1 ++ " Current phase:           1";
-                {_, true} ->
-                    S1 ++ " Current phase:           last, waiting for pending clients";
-                {{ok,P}, _} ->
-                    NPhases = (P div Nodes) + 1,
-                    io_lib:format("~s Current phase:        ~p",[S1,NPhases])
-            end;
-        {'EXIT', {noproc, _}} ->
-            "Tsung is not started";
-        {'EXIT', _Else} ->
-            "No status: Can't communicate with Tsung controller "
-    end.
 
 %%----------------------------------------------------------------------
 %% Func: stop/1
